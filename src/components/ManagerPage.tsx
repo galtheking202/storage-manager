@@ -5,11 +5,11 @@ type ManagerTab = 'setup' | 'inventory' | 'users' | 'approvals';
 
 export default function ManagerPage() {
   const [tab, setTab] = useState<ManagerTab>('setup');
-  const { users } = useStore();
+  const { users, pendingUsers } = useStore();
 
-  const pendingCount = users
-    .flatMap((u) => u.acquisitions)
-    .filter((a) => a.status === 'pending' || a.status === 'return_pending').length;
+  const pendingCount =
+    users.flatMap((u) => u.acquisitions).filter((a) => a.status === 'pending' || a.status === 'return_pending').length +
+    pendingUsers.length;
 
   return (
     <div className="page">
@@ -276,7 +276,7 @@ function UsersTab() {
 
 /* ── אישורים ── */
 function ApprovalsTab() {
-  const { users, approveAcquisition, approveReturn } = useStore();
+  const { users, approveAcquisition, approveReturn, pendingUsers, approveUser, rejectUser } = useStore();
 
   const pending = users.flatMap((u) =>
     u.acquisitions
@@ -291,6 +291,41 @@ function ApprovalsTab() {
 
   return (
     <div className="page">
+      {pendingUsers.length > 0 && (
+        <div className="card">
+          <h3>בקשות הרשמה ממתינות לאישור ({pendingUsers.length})</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>שם</th>
+                <th>אימייל</th>
+                <th>תאריך בקשה</th>
+                <th>פעולות</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingUsers.map((u) => (
+                <tr key={u.id}>
+                  <td><strong>{u.name}</strong></td>
+                  <td dir="ltr">{u.email}</td>
+                  <td>{u.createdAt.split('T')[0]}</td>
+                  <td>
+                    <div className="action-row">
+                      <button className="btn btn-success btn-sm" onClick={() => approveUser(u.id)}>
+                        אשר ✓
+                      </button>
+                      <button className="btn btn-danger btn-sm" onClick={() => rejectUser(u.id)}>
+                        דחה
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="card">
         <h3>בקשות השאלה ממתינות לאישור ({pending.length})</h3>
         {pending.length === 0 ? (

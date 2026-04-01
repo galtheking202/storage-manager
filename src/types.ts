@@ -37,3 +37,10 @@ export interface User {
   name: string;
   acquisitions: Acquisition[];
 }
+
+export interface PendingUser {
+  id: number;
+  name: string;
+  email: string;
+  createdAt: string;
+}

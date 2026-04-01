@@ -8,6 +8,25 @@ const router = Router();
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret';
 
+// POST /api/auth/signup — public: soldier self-registration, requires manager approval
+router.post('/signup', async (req, res) => {
+  const { name, email, password } = req.body as { name: string; email: string; password: string };
+  if (!name || !email || !password) {
+    res.status(400).json({ error: 'נדרשים שם, אימייל וסיסמה' });
+    return;
+  }
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    res.status(409).json({ error: 'אימייל כבר קיים במערכת' });
+    return;
+  }
+  const passwordHash = await bcrypt.hash(password, 10);
+  await prisma.user.create({
+    data: { name, email, passwordHash, role: 'soldier', status: 'pending' },
+  });
+  res.status(201).json({ message: 'הבקשה נשלחה בהצלחה, ממתין לאישור מנהל' });
+});
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const { email, password } = req.body as { email: string; password: string };
@@ -23,6 +42,10 @@ router.post('/login', async (req, res) => {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
     res.status(401).json({ error: 'פרטים שגויים' });
+    return;
+  }
+  if (user.status !== 'active') {
+    res.status(403).json({ error: 'חשבונך ממתין לאישור מנהל' });
     return;
   }
   const token = jwt.sign(
@@ -43,7 +66,7 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
   res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
 
-// POST /api/auth/register — manager only: create soldier or manager accounts
+// POST /api/auth/register — manager only: create accounts (active immediately)
 router.post('/register', authenticateToken, requireManager, async (req: AuthRequest, res) => {
   const { name, email, password, role } = req.body as {
     name: string;
@@ -62,7 +85,7 @@ router.post('/register', authenticateToken, requireManager, async (req: AuthRequ
   }
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { name, email, passwordHash, role: role === 'manager' ? 'manager' : 'soldier' },
+    data: { name, email, passwordHash, role: role === 'manager' ? 'manager' : 'soldier', status: 'active' },
   });
   res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Item, User, Acquisition, LoanType, AuthUser } from './types';
+import type { Item, User, Acquisition, LoanType, AuthUser, PendingUser } from './types';
 import { api } from './api';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
@@ -10,12 +10,18 @@ interface StoreState {
   users: User[];
   currentUser: User | null;
 
+  pendingUsers: PendingUser[];
+
   initAuth: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  signup: (name: string, email: string, password: string) => Promise<void>;
   fetchItems: () => Promise<void>;
   fetchUsers: () => Promise<void>;
   fetchCurrentUserData: () => Promise<void>;
+  fetchPendingUsers: () => Promise<void>;
+  approveUser: (userId: number) => Promise<void>;
+  rejectUser: (userId: number) => Promise<void>;
 
   addItem: (name: string, amount: number, category: string, notes: string) => void;
   updateItemAmount: (id: string, delta: number) => void;
@@ -86,6 +92,7 @@ export const useStore = create<StoreState>((set, get) => ({
   items: [],
   users: [],
   currentUser: null,
+  pendingUsers: [],
 
   initAuth: async () => {
     const token = localStorage.getItem('token');
@@ -95,7 +102,7 @@ export const useStore = create<StoreState>((set, get) => ({
       set({ auth: { user, token } });
       const { fetchItems, fetchUsers, fetchCurrentUserData } = get();
       if (user.role === 'manager') {
-        await Promise.all([fetchItems(), fetchUsers()]);
+        await Promise.all([fetchItems(), fetchUsers(), fetchPendingUsers()]);
       } else {
         await Promise.all([fetchItems(), fetchCurrentUserData()]);
       }
@@ -117,9 +124,9 @@ export const useStore = create<StoreState>((set, get) => ({
     const { token, user } = (await res.json()) as { token: string; user: AuthUser };
     localStorage.setItem('token', token);
     set({ auth: { user, token } });
-    const { fetchItems, fetchUsers, fetchCurrentUserData } = get();
+    const { fetchItems, fetchUsers, fetchCurrentUserData, fetchPendingUsers } = get();
     if (user.role === 'manager') {
-      await Promise.all([fetchItems(), fetchUsers()]);
+      await Promise.all([fetchItems(), fetchUsers(), fetchPendingUsers()]);
     } else {
       await Promise.all([fetchItems(), fetchCurrentUserData()]);
     }
@@ -127,7 +134,19 @@ export const useStore = create<StoreState>((set, get) => ({
 
   logout: () => {
     localStorage.removeItem('token');
-    set({ auth: null, currentUser: null, users: [], items: [] });
+    set({ auth: null, currentUser: null, users: [], items: [], pendingUsers: [] });
+  },
+
+  signup: async (name, email, password) => {
+    const res = await fetch(`${API_URL}/api/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'שגיאה בהרשמה' }));
+      throw new Error((err as { error?: string }).error ?? 'שגיאה בהרשמה');
+    }
   },
 
   fetchItems: async () => {
@@ -140,6 +159,21 @@ export const useStore = create<StoreState>((set, get) => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const users = await api.get<any[]>('/api/users');
     set({ users: users.map(normalizeUser) });
+  },
+
+  fetchPendingUsers: async () => {
+    const users = await api.get<PendingUser[]>('/api/users/pending');
+    set({ pendingUsers: users });
+  },
+
+  approveUser: async (userId) => {
+    set((s) => ({ pendingUsers: s.pendingUsers.filter((u) => u.id !== userId) }));
+    await api.patch(`/api/users/${userId}/approve`, {});
+  },
+
+  rejectUser: async (userId) => {
+    set((s) => ({ pendingUsers: s.pendingUsers.filter((u) => u.id !== userId) }));
+    await api.delete(`/api/users/${userId}`);
   },
 
   fetchCurrentUserData: async () => {
