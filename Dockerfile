@@ -8,8 +8,9 @@ COPY . .
 RUN npx vite build
 
 FROM nginx:alpine
-RUN apk add --no-cache gettext
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf.template
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 EXPOSE 80
-CMD ["/bin/sh", "-c", "envsubst '$PORT' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
+CMD ["/start.sh"]
