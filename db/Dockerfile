@@ -1,0 +1,4 @@
+FROM postgres:16-alpine
+ENV POSTGRES_DB=haleldb
+ENV POSTGRES_USER=halel
+ENV POSTGRES_PASSWORD=changeme

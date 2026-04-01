@@ -1,0 +1,70 @@
+import { Router } from 'express';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { PrismaClient } from '@prisma/client';
+import { authenticateToken, requireManager, AuthRequest } from '../middleware/auth';
+
+const router = Router();
+const prisma = new PrismaClient();
+const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret';
+
+// POST /api/auth/login
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body as { email: string; password: string };
+  if (!email || !password) {
+    res.status(400).json({ error: 'נדרשים אימייל וסיסמה' });
+    return;
+  }
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    res.status(401).json({ error: 'פרטים שגויים' });
+    return;
+  }
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) {
+    res.status(401).json({ error: 'פרטים שגויים' });
+    return;
+  }
+  const token = jwt.sign(
+    { id: user.id, role: user.role, email: user.email },
+    JWT_SECRET,
+    { expiresIn: '8h' }
+  );
+  res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+});
+
+// GET /api/auth/me
+router.get('/me', authenticateToken, async (req: AuthRequest, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+  if (!user) {
+    res.status(404).json({ error: 'משתמש לא נמצא' });
+    return;
+  }
+  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+});
+
+// POST /api/auth/register — manager only: create soldier or manager accounts
+router.post('/register', authenticateToken, requireManager, async (req: AuthRequest, res) => {
+  const { name, email, password, role } = req.body as {
+    name: string;
+    email: string;
+    password: string;
+    role?: string;
+  };
+  if (!name || !email || !password) {
+    res.status(400).json({ error: 'נדרשים שם, אימייל וסיסמה' });
+    return;
+  }
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    res.status(409).json({ error: 'אימייל כבר קיים במערכת' });
+    return;
+  }
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = await prisma.user.create({
+    data: { name, email, passwordHash, role: role === 'manager' ? 'manager' : 'soldier' },
+  });
+  res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role });
+});
+
+export default router;

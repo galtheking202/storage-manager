@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  name         String        @db.VarChar(100)
+  email        String        @unique @db.VarChar(150)
+  passwordHash String        @db.VarChar(255)
+  role         String        @default("soldier") @db.VarChar(10)
+  createdAt    DateTime      @default(now())
+  acquisitions Acquisition[]
+}
+
+model Item {
+  id           Int           @id @default(autoincrement())
+  name         String        @db.VarChar(100)
+  category     String        @db.VarChar(50)
+  totalAmount  Int
+  available    Int
+  notes        String        @default("")
+  acquisitions Acquisition[]
+}
+
+model Acquisition {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  itemId      Int
+  amount      Int
+  loanType    String    @db.VarChar(10)
+  status      String    @default("pending") @db.VarChar(20)
+  missionName String?   @db.VarChar(100)
+  returnDate  DateTime? @db.Date
+  acquiredAt  DateTime  @default(now()) @db.Date
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id])
+  item        Item      @relation(fields: [itemId], references: [id])
+}
