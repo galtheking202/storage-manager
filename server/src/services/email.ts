@@ -4,7 +4,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const SERVER_URL =
   process.env.SERVER_URL ??
   (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : 'http://localhost:3000');
-const FROM_EMAIL = process.env.FROM_EMAIL ?? 'onboarding@resend.dev';
+const FROM_EMAIL = process.env.FROM_EMAIL ?? 'noreply@angelcies.com';
 
 export async function sendVerificationEmail(to: string, name: string, token: string): Promise<void> {
   const link = `${SERVER_URL}/api/auth/verify-email?token=${token}`;
