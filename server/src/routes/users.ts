@@ -29,7 +29,7 @@ router.get('/', async (_req, res) => {
 // GET /api/users/pending — pending registration requests
 router.get('/pending', async (_req, res) => {
   const users = await prisma.user.findMany({
-    where: { status: 'pending' },
+    where: { status: 'pending', emailVerified: true },
     select: { id: true, name: true, email: true, createdAt: true },
     orderBy: { createdAt: 'asc' },
   });

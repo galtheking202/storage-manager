@@ -10,6 +10,10 @@ const router = Router();
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret';
 
+function log(tag: string, msg: string) {
+  console.log(`[${new Date().toISOString()}] [${tag}] ${msg}`);
+}
+
 function generateVerifyToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
@@ -23,6 +27,7 @@ router.post('/signup', async (req, res) => {
   }
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
+    log('SIGNUP', `Rejected — email already exists: ${email}`);
     res.status(409).json({ error: 'אימייל כבר קיים במערכת' });
     return;
   }
@@ -31,10 +36,12 @@ router.post('/signup', async (req, res) => {
   await prisma.user.create({
     data: { name, email, passwordHash, role: 'soldier', status: 'pending', verifyToken },
   });
+  log('SIGNUP', `New soldier registered, awaiting email verification: ${email} (${name})`);
   try {
     await sendVerificationEmail(email, name, verifyToken);
+    log('EMAIL', `Verification email sent to: ${email}`);
   } catch (err) {
-    console.error('Failed to send verification email:', err);
+    log('EMAIL', `Failed to send verification email to ${email}: ${err}`);
   }
   res.status(201).json({ message: 'הבקשה נשלחה. בדוק את תיבת הדואר שלך לאימות האימייל.' });
 });
@@ -68,11 +75,13 @@ router.get('/verify-email', async (req, res) => {
   `;
 
   if (!token) {
+    log('VERIFY', 'Verification attempt with missing token');
     res.status(400).send(html('שגיאה', 'קישור לא תקין.', false));
     return;
   }
   const user = await prisma.user.findUnique({ where: { verifyToken: token } });
   if (!user) {
+    log('VERIFY', 'Verification attempt with invalid or already-used token');
     res.status(400).send(html('קישור לא תקין', 'הקישור כבר נוצל או שאינו תקין.', false));
     return;
   }
@@ -80,6 +89,7 @@ router.get('/verify-email', async (req, res) => {
     where: { id: user.id },
     data: { emailVerified: true, verifyToken: null },
   });
+  log('VERIFY', `Email verified for: ${user.email} (${user.name})`);
   res.send(html('האימייל אומת בהצלחה', 'כתובת האימייל שלך אומתה. תוכל להתחבר לאחר אישור המנהל.', true));
 });
 
@@ -92,19 +102,23 @@ router.post('/login', async (req, res) => {
   }
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
+    log('LOGIN', `Failed — unknown email: ${email}`);
     res.status(401).json({ error: 'פרטים שגויים' });
     return;
   }
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
+    log('LOGIN', `Failed — wrong password for: ${email}`);
     res.status(401).json({ error: 'פרטים שגויים' });
     return;
   }
   if (!user.emailVerified) {
+    log('LOGIN', `Failed — email not verified: ${email}`);
     res.status(403).json({ error: 'יש לאמת את כתובת האימייל תחילה. בדוק את תיבת הדואר שלך.' });
     return;
   }
   if (user.status !== 'active') {
+    log('LOGIN', `Failed — account pending approval: ${email}`);
     res.status(403).json({ error: 'חשבונך ממתין לאישור מנהל' });
     return;
   }
@@ -113,6 +127,7 @@ router.post('/login', async (req, res) => {
     JWT_SECRET,
     { expiresIn: '8h' }
   );
+  log('LOGIN', `Success: ${email} (${user.role})`);
   res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
 });
 
@@ -140,25 +155,22 @@ router.post('/register', authenticateToken, requireManager, async (req: AuthRequ
   }
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
+    log('REGISTER', `Rejected — email already exists: ${email}`);
     res.status(409).json({ error: 'אימייל כבר קיים במערכת' });
     return;
   }
   const passwordHash = await bcrypt.hash(password, 10);
   const verifyToken = generateVerifyToken();
+  const assignedRole = role === 'manager' ? 'manager' : 'soldier';
   const user = await prisma.user.create({
-    data: {
-      name,
-      email,
-      passwordHash,
-      role: role === 'manager' ? 'manager' : 'soldier',
-      status: 'active',
-      verifyToken,
-    },
+    data: { name, email, passwordHash, role: assignedRole, status: 'active', verifyToken },
   });
+  log('REGISTER', `Account created by manager: ${email} (${assignedRole})`);
   try {
     await sendVerificationEmail(email, name, verifyToken);
+    log('EMAIL', `Verification email sent to: ${email}`);
   } catch (err) {
-    console.error('Failed to send verification email:', err);
+    log('EMAIL', `Failed to send verification email to ${email}: ${err}`);
   }
   res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
