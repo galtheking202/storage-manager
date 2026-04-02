@@ -42,20 +42,45 @@ router.post('/signup', async (req, res) => {
 // GET /api/auth/verify-email?token=xxx — public: verify email address
 router.get('/verify-email', async (req, res) => {
   const { token } = req.query as { token?: string };
+
+  const html = (title: string, msg: string, ok: boolean) => `
+    <!DOCTYPE html>
+    <html dir="rtl" lang="he">
+    <head><meta charset="UTF-8"><title>${title}</title>
+    <style>
+      body { font-family: Arial, sans-serif; display: flex; justify-content: center;
+             align-items: center; height: 100vh; margin: 0; background: #f3f4f6; }
+      .card { background: white; border-radius: 12px; padding: 2.5rem 3rem;
+              text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.1); max-width: 400px; }
+      .icon { font-size: 3rem; }
+      h2 { margin: 1rem 0 0.5rem; color: ${ok ? '#15803d' : '#dc2626'}; }
+      p { color: #6b7280; font-size: 0.95rem; }
+    </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="icon">${ok ? '✓' : '✗'}</div>
+        <h2>${title}</h2>
+        <p>${msg}</p>
+      </div>
+    </body>
+    </html>
+  `;
+
   if (!token) {
-    res.status(400).json({ error: 'טוקן חסר' });
+    res.status(400).send(html('שגיאה', 'קישור לא תקין.', false));
     return;
   }
   const user = await prisma.user.findUnique({ where: { verifyToken: token } });
   if (!user) {
-    res.status(400).json({ error: 'קישור לא תקין או שכבר נוצל' });
+    res.status(400).send(html('קישור לא תקין', 'הקישור כבר נוצל או שאינו תקין.', false));
     return;
   }
   await prisma.user.update({
     where: { id: user.id },
     data: { emailVerified: true, verifyToken: null },
   });
-  res.json({ message: 'האימייל אומת בהצלחה' });
+  res.send(html('האימייל אומת בהצלחה', 'כתובת האימייל שלך אומתה. תוכל להתחבר לאחר אישור המנהל.', true));
 });
 
 // POST /api/auth/login
