@@ -118,7 +118,7 @@ export default function LoginPage() {
                 <div style={{ fontSize: '2rem' }}>✓</div>
                 <p>הבקשה נשלחה בהצלחה</p>
                 <p style={{ fontSize: '.85rem', color: '#6b7280', marginTop: '.35rem' }}>
-                  ממתין לאישור מנהל. לאחר האישור תוכל להתחבר.
+                  נשלח אליך מייל לאימות הכתובת — אמת אותה ואז המתן לאישור מנהל.
                 </p>
                 <button
                   className="btn btn-outline btn-sm"

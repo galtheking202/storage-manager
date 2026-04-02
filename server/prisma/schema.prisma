@@ -8,14 +8,16 @@ datasource db {
 }
 
 model User {
-  id           Int           @id @default(autoincrement())
-  name         String        @db.VarChar(100)
-  email        String        @unique @db.VarChar(150)
-  passwordHash String        @db.VarChar(255)
-  role         String        @default("soldier") @db.VarChar(10)
-  status       String        @default("pending") @db.VarChar(10)
-  createdAt    DateTime      @default(now())
-  acquisitions Acquisition[]
+  id            Int           @id @default(autoincrement())
+  name          String        @db.VarChar(100)
+  email         String        @unique @db.VarChar(150)
+  passwordHash  String        @db.VarChar(255)
+  role          String        @default("soldier") @db.VarChar(10)
+  status        String        @default("pending") @db.VarChar(10)
+  emailVerified Boolean       @default(false)
+  verifyToken   String?       @unique @db.VarChar(64)
+  createdAt     DateTime      @default(now())
+  acquisitions  Acquisition[]
 }
 
 model Item {

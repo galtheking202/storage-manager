@@ -19,8 +19,11 @@ app.use('/api/acquisitions', acquisitionsRoutes);
 app.use('/api/users', usersRoutes);
 
 async function seedManagerIfNeeded() {
-  // Ensure all existing managers are active after schema changes
-  await prisma.user.updateMany({ where: { role: 'manager' }, data: { status: 'active' } });
+  // Ensure all existing managers are active and email-verified after schema changes
+  await prisma.user.updateMany({
+    where: { role: 'manager' },
+    data: { status: 'active', emailVerified: true, verifyToken: null },
+  });
 
   const { SEED_EMAIL, SEED_PASSWORD, SEED_NAME } = process.env;
   if (!SEED_EMAIL || !SEED_PASSWORD) return;
@@ -28,7 +31,7 @@ async function seedManagerIfNeeded() {
   if (existing) return;
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, 10);
   await prisma.user.create({
-    data: { name: SEED_NAME ?? 'מנהל', email: SEED_EMAIL, passwordHash, role: 'manager', status: 'active' },
+    data: { name: SEED_NAME ?? 'מנהל', email: SEED_EMAIL, passwordHash, role: 'manager', status: 'active', emailVerified: true },
   });
   console.log(`Manager account seeded: ${SEED_EMAIL}`);
 }

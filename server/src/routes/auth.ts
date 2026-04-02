@@ -1,12 +1,18 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, requireManager, AuthRequest } from '../middleware/auth';
+import { sendVerificationEmail } from '../services/email';
 
 const router = Router();
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret';
+
+function generateVerifyToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
 
 // POST /api/auth/signup — public: soldier self-registration, requires manager approval
 router.post('/signup', async (req, res) => {
@@ -21,10 +27,35 @@ router.post('/signup', async (req, res) => {
     return;
   }
   const passwordHash = await bcrypt.hash(password, 10);
+  const verifyToken = generateVerifyToken();
   await prisma.user.create({
-    data: { name, email, passwordHash, role: 'soldier', status: 'pending' },
+    data: { name, email, passwordHash, role: 'soldier', status: 'pending', verifyToken },
   });
-  res.status(201).json({ message: 'הבקשה נשלחה בהצלחה, ממתין לאישור מנהל' });
+  try {
+    await sendVerificationEmail(email, name, verifyToken);
+  } catch (err) {
+    console.error('Failed to send verification email:', err);
+  }
+  res.status(201).json({ message: 'הבקשה נשלחה. בדוק את תיבת הדואר שלך לאימות האימייל.' });
+});
+
+// GET /api/auth/verify-email?token=xxx — public: verify email address
+router.get('/verify-email', async (req, res) => {
+  const { token } = req.query as { token?: string };
+  if (!token) {
+    res.status(400).json({ error: 'טוקן חסר' });
+    return;
+  }
+  const user = await prisma.user.findUnique({ where: { verifyToken: token } });
+  if (!user) {
+    res.status(400).json({ error: 'קישור לא תקין או שכבר נוצל' });
+    return;
+  }
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { emailVerified: true, verifyToken: null },
+  });
+  res.json({ message: 'האימייל אומת בהצלחה' });
 });
 
 // POST /api/auth/login
@@ -42,6 +73,10 @@ router.post('/login', async (req, res) => {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
     res.status(401).json({ error: 'פרטים שגויים' });
+    return;
+  }
+  if (!user.emailVerified) {
+    res.status(403).json({ error: 'יש לאמת את כתובת האימייל תחילה. בדוק את תיבת הדואר שלך.' });
     return;
   }
   if (user.status !== 'active') {
@@ -84,9 +119,22 @@ router.post('/register', authenticateToken, requireManager, async (req: AuthRequ
     return;
   }
   const passwordHash = await bcrypt.hash(password, 10);
+  const verifyToken = generateVerifyToken();
   const user = await prisma.user.create({
-    data: { name, email, passwordHash, role: role === 'manager' ? 'manager' : 'soldier', status: 'active' },
+    data: {
+      name,
+      email,
+      passwordHash,
+      role: role === 'manager' ? 'manager' : 'soldier',
+      status: 'active',
+      verifyToken,
+    },
   });
+  try {
+    await sendVerificationEmail(email, name, verifyToken);
+  } catch (err) {
+    console.error('Failed to send verification email:', err);
+  }
   res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
 
